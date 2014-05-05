@@ -1,38 +1,132 @@
-Role Name
-========
+etckeeper
+=========
 
-A brief description of the role goes here.
+Ansible role to install, configure, and use etckeeper with Git.
 
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+* Developed and tested with Ansible 1.5, but should work with 1.3 or later.
+* Debian/Ubuntu system (python-apt needed) [Patches to support yum welcomed!]
 
 Role Variables
 --------------
+There are three parameter variables (with defaults in the role tasks file):
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+* **install** - *boolean* (default is **false**)
+
+  This should be set as **true** in the first play.
+
+* **commit** - *boolean* (default is **true**)
+
+  Enables notification to "Record changes in etckeeper" handler,
+  which generates an etckeeper commit for the play.
+  Rather than setting this to false, just omit the etckeeper role entirely
+  (unless this is the first play).
+
+* **precommit** - *boolean* (default is **true**)
+
+  Enables the "Record unsaved changes in etckeeper" task,
+  which generates an etckeeper commit before the play runs.
+  You might want to set this to false if you want to combine the results
+  of several plays in a single commit, but this is not generally advised.
+  Note that precommit is always disabled if the *commit* variable is false. 
+
+There are two variables (with defaults in ``defaults/main.yml``)
+that control the commit messages used by etckeeper when *commit* is true:
+
+* **etckeeper_message** - *string*
+  (default is "changes from Ansible play running as {{ ansible_user_id }}")
+
+  This message is used for commits that take place at the end of a play.
+
+* **etckeeper_pre_message** - *string*
+  (default is "saving uncommitted changes in /etc prior to ansible play")
+
+  This message is used for commits that take place at the start of a play.
+  These commits save any pending changes separately.
+
+There is a configuration variable (with default in ``defaults/main.yml``)
+that controls the version control system that etckeeper will use
+if *install* is true and etckeeper has not previously been installed:
+
+* **etckeeper_vcs** - *string  (default is "git", other choices: "hg", "darcs")
+
+  This determines the version control system that etckeeper will use.
+  Although the etckeeper package default is Mercurial ("hg"),
+  this Ansible role has only been tested with Git.
+  If etckeeper has already been installed, this variable has no effect.
 
 Dependencies
 ------------
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+None.
+
 
 Example Playbook
 -------------------------
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+This role (and nothing else) should be the first play in a playbook,
+and ideally you would run it as the very first play on any server,
+since the first time it runs it generates an initial commit
+with (nearly) the entire contents of the ``/etc/`` directory.
 
+Adding the etckeeper role to other plays generates etckeeper commits
+at the end of the play (and possibly the start, if there are unsaved changes).
+For accurate unsaved change detection, the etckeeper role should be the first.
+Using the etckeeper role, the etckeeper commits run in a handler,
+(once) after all tasks, but possibly before some other handlers.
+
+Eventually, this software should add an ``etckeeper`` action module
+so tasks can trigger immediate etckeeper commits in conditional tasks;
+for now, you can use shell actions as illustrated in the example.
+
+Running etckeeper commits in tasks allows more than one in a play,
+but since all roles in a play run before any playbook tasks in the play,
+breaking the playbook into many smaller plays with one role each
+is still necessary to achieve finer-grained commits.
+
+Here is an example playbook that uses the etckeeper role to perform
+installations and commits, and also uses a shell action to perform commits.
+
+    # This should be the first play in the playbook
     - hosts: servers
       roles:
-         - { role: username.rolename, x: 42 }
+      - { role: etckeeper, install: true }
+      # Do not add any other roles to this play
+
+    # This is the second play
+    - hosts: servers
+      roles:
+      - { role: etckeeper, etckeeper_message: '2nd play of playbook' }
+      - ...
+
+    # This is the third play
+    - hosts: servers
+      tasks:
+      - name: Install and/or configure something
+        action: ...
+        register: result
+      - name: Record changes for previous task in etckeeper commit
+        shell: if etckeeper unclean; then etckeeper commit '3rd play pt. 1'; fi
+        when: result|changed
+      - name: Do something that doesn't change anything in /etc
+        action: ...
+      - name: Do something else that could change something in /etc
+        action: ...
+        notify: Record other changes for this play in etckeeper commit
+     handlers:
+     - name: Record other changes for this play in etckeeper commit
+       shell: if etckeeper unclean; then etckeeper commit '3rd play pt. 2'; fi
 
 License
 -------
 
-BSD
+MIT (Expat) - see LICENSE file for details
 
 Author Information
 ------------------
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+You can contact me at [alex.dupuy mac.com](mailto:alex.dupuy%40mac.com);
+check out my other open source contributions at
+[Ohloh](https://www.ohloh.net/accounts/dupuy/).
