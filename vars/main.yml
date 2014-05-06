@@ -1,2 +1,14 @@
+%YAML 1.1  # roles/etckeeper/tasks/defaults.yml  -*- mode: yaml -*-
+
+# Ansible role to install, configure, and use etckeeper
 ---
 # vars file for etckeeper
+
+# Perform installation and initialization of etckeeper
+install: false
+
+# Perform notification for etckeeper handler commit
+commit: true
+
+# Perform commit for etckeeper pre-play task (requires commit as well)
+precommit: true
