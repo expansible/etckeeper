@@ -1,7 +1,9 @@
 etckeeper
 =========
 
-Ansible role to install, configure, and use etckeeper with Git.
+Ansible role to install, configure, and use etckeeper.
+
+[![Build Status](https://travis-ci.org/expansible/etckeeper.svg?branch=master)](https://travis-ci.org/expansible/etckeeper)
 
 Requirements
 ------------
@@ -50,7 +52,7 @@ There is a configuration variable (with default in ``defaults/main.yml``)
 that controls the version control system that etckeeper will use
 if *install* is true and etckeeper has not previously been installed:
 
-* **etckeeper_vcs** - *string  (default is "git", other choices: "hg", "darcs")
+* **etckeeper_vcs** - *string  (default is "git", or "hg", "bzr", or "darcs")
 
   This determines the version control system that etckeeper will use.
   Although the etckeeper package default is Mercurial ("hg"),
@@ -89,31 +91,34 @@ is still necessary to achieve finer-grained commits.
 Here is an example playbook that uses the etckeeper role to perform
 installations and commits, and also uses a shell action to perform commits.
 
+    ---
     # This should be the first play in the playbook
-    - hosts: servers
+    - hosts: all
+      vars:
+      - etckeeper_vcs: git
       roles:
       - { role: etckeeper, install: true }
       # Do not add any other roles to this play
 
     # This is the second play
-    - hosts: servers
+    - hosts: all
       roles:
       - { role: etckeeper, etckeeper_message: '2nd play of playbook' }
-      - ...
+      # additional roles here
 
     # This is the third play
-    - hosts: servers
+    - hosts: all
       tasks:
       - name: Install and/or configure something
-        action: ...
+        command: cp /dev/null /etc/null
         register: result
       - name: Record changes for previous task in etckeeper commit
         shell: if etckeeper unclean; then etckeeper commit '3rd play pt. 1'; fi
         when: result|changed
       - name: Do something that doesn't change anything in /etc
-        action: ...
+        action: true
       - name: Do something else that could change something in /etc
-        action: ...
+        action: cp /dev/null /etc/zero
         notify: Record other changes for this play in etckeeper commit
      handlers:
      - name: Record other changes for this play in etckeeper commit
