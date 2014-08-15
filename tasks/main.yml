@@ -7,22 +7,40 @@
 - name: Install etckeeper
   apt: pkg=etckeeper state=installed
        install_recommends=no
+  notify: Record changes in etckeeper
+  when: install
+
+# This won't run if install file exists, so result.changed will be false,
+# thereby suppressing other install tasks.  Install file is created by the
+# "Mark etckeeper install as initialized" task after initialization.
+- name: Check for existing initialized etckeeper install
+  command: true
+           creates=/etc/.etckeeper.initialized
   register: result
   notify: Record changes in etckeeper
   when: install
 
-  # fix `etckeeper unclean` if necessary (from etckeeper.git commit aeb50b5)
-- name: Maybe fix etckeeper unclean
-  lineinfile: dest=/etc/etckeeper/unclean.d/50test state=present
-              regexp=' -d \.git'
-              line='       [ -d .git ] && [ -n "`git status --porcelain`" ]'
-  notify: Record changes in etckeeper
-  when: install
+- name: Install etckeeper VCS
+  apt: pkg={{ item }} state=installed
+       install_recommends=no
+  with_items:
+  - "{% 'bzr' if etckeeper_vcs == 'bzr' %}"
+  - "{% 'git-common' if etckeeper_vcs == 'git' %}"
+  - "{% 'mercurial-common' if etckeeper_vcs == 'hg' %}"
+  - "{% 'darcs' if etckeeper_vcs == 'darcs' %}"
+  when: install and result|changed
 
 - name: Set etckeeper VCS
   lineinfile: dest=/etc/etckeeper/etckeeper.conf state=present
               regexp='^VCS=' line='VCS={{ etckeeper_vcs }}'
-  when: result|changed
+  when: install and result|changed
+
+# fix `etckeeper unclean` if necessary (from etckeeper.git commit aeb50b5)
+- name: Maybe fix etckeeper unclean
+  lineinfile: dest=/etc/etckeeper/unclean.d/50test state=present
+              regexp=' -d \.git'
+              line='       [ -d .git ] && [ -n "`git status --porcelain`" ]'
+  when: install and result|changed
 
 - name: Ignore password/group/shadow backups
   lineinfile: dest=/etc/.{{ etckeeper_vcs }}ignore state=present
@@ -31,15 +49,20 @@
   - '# begin section managed by etckeeper (do not edit this section by hand)'
   - '# end section managed by etckeeper'
   - '# ignore {passwd,group,shadow,gshadow}- backup files'
-  - '{% "." if etckeeper_vcs == hg %}*-'
-  notify: Record changes in etckeeper
+  - '{% "." if etckeeper_vcs == darcs %}*-'
+  when: install and result|changed
 
 - name: Initialize etckeeper
   command: etckeeper init
-           creates=/etc/.git
-  notify: Record changes in etckeeper
+           creates=/etc/.{{ etckeeper_vcs }}
+  when: install and result|changed
+
+# "Mark etckeeper install as initialized" task after initialization.
+- name: Mark etckeeper install as initialed
+  file: dest=/etc/.etckeeper.initialized content=""
+  when: install and result|changed
 
 - name: Record unsaved changes in etckeeper
   shell: "if etckeeper unclean;
           then etckeeper commit '{{ etckeeper_pre_message }}'; fi"
-  when: precommit and commit
+  when: precommit and commit and not (install and result|changed)
